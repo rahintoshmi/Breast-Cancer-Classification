@@ -1,22 +1,33 @@
+# ======================================================================================
+# --------------------------------- IMPORTS & SETUP ------------------------------------
+# ======================================================================================
 import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import joblib
-from sklearn.metrics import (accuracy_score, precision_score, recall_score, f1_score,
-                             confusion_matrix, roc_curve, auc, precision_recall_curve, roc_auc_score)
+from sklearn.metrics import (
+    accuracy_score, precision_score, recall_score, f1_score,
+    confusion_matrix, roc_curve, auc, precision_recall_curve, roc_auc_score
+)
 import warnings
 warnings.filterwarnings('ignore')
 
-st.set_page_config(page_title="Breast Cancer Detection", page_icon="🏥", layout="wide")
+# Set page configuration
+st.set_page_config(page_title="Breast Cancer Detection", page_icon="🎗️", layout="wide")
 
-# ============================================================================
-# LOAD MODELS
-# ============================================================================
+
+# ======================================================================================
+# ------------------------------- MODEL & DATA LOADING ---------------------------------
+# ======================================================================================
 
 @st.cache_resource
-def load_models():
+def load_models_and_data():
+    """
+    Loads all necessary model files, scaler, and feature names.
+    Returns models, scaler, feature_names, and a status flag.
+    """
     try:
         models = {
             'Logistic Regression': joblib.load('models/logistic_regression.pkl'),
@@ -29,30 +40,15 @@ def load_models():
     except FileNotFoundError:
         return None, None, None, False
 
-models, scaler, feature_names, models_exist = load_models()
+# Load the models into the app
+models, scaler, feature_names, models_exist = load_models_and_data()
 
-# ============================================================================
-# CHECK IF MODELS EXIST
-# ============================================================================
-
-if not models_exist:
-    st.error("ERROR: Models not found!")
-    st.warning("Make sure you have these files in the 'models/' folder:")
-    st.code("""
-models/
-├── logistic_regression.pkl
-├── random_forest.pkl
-├── xgboost.pkl
-├── scaler.pkl
-└── feature_names.pkl
-    """)
-    st.stop()
-
-# ============================================================================
-# HELPER FUNCTIONS
-# ============================================================================
+# ======================================================================================
+# -------------------------------- HELPER FUNCTIONS ------------------------------------
+# ======================================================================================
 
 def calculate_metrics(y_true, y_pred, y_pred_proba=None):
+    """Calculates a dictionary of classification metrics."""
     accuracy = accuracy_score(y_true, y_pred)
     precision = precision_score(y_true, y_pred, zero_division=0)
     recall = recall_score(y_true, y_pred, zero_division=0)
@@ -60,85 +56,109 @@ def calculate_metrics(y_true, y_pred, y_pred_proba=None):
     cm = confusion_matrix(y_true, y_pred)
     tn, fp, fn, tp = cm.ravel()
     specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
-    auc_score = roc_auc_score(y_true, y_pred_proba) if y_pred_proba is not None else None
+    auc_score_val = roc_auc_score(y_true, y_pred_proba) if y_pred_proba is not None else None
     return {
         'accuracy': accuracy, 'precision': precision, 'recall': recall,
-        'specificity': specificity, 'f1_score': f1, 'auc_score': auc_score,
+        'specificity': specificity, 'f1_score': f1, 'auc_score': auc_score_val,
         'tp': tp, 'tn': tn, 'fp': fp, 'fn': fn
     }
 
-def preprocess_new_data(data, feature_names, scaler):
-    data = data[feature_names]
-    data_scaled = scaler.transform(data)
+def preprocess_new_data(data, features, scl):
+    """Selects features and scales the data for prediction."""
+    data = data[features]
+    data_scaled = scl.transform(data)
     return data_scaled
 
-# ============================================================================
-# VISUALIZATION FUNCTIONS
-# ============================================================================
+# ======================================================================================
+# ------------------------------ VISUALIZATION FUNCTIONS -------------------------------
+# ======================================================================================
 
 def plot_confusion_matrix(y_true, y_pred, model_name):
+    """Generates a styled confusion matrix plot."""
     cm = confusion_matrix(y_true, y_pred)
     fig, ax = plt.subplots(figsize=(8, 6))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax,
-                xticklabels=['Benign', 'Malignant'],
-                yticklabels=['Benign', 'Malignant'],
-                cbar_kws={'label': 'Count'})
-    ax.set_title(f'Confusion Matrix - {model_name}', fontweight='bold')
-    ax.set_ylabel('Actual Label')
-    ax.set_xlabel('Predicted Label')
+    sns.heatmap(
+        cm, annot=True, fmt='d', cmap='Blues', ax=ax,
+        xticklabels=['Benign', 'Malignant'],
+        yticklabels=['Benign', 'Malignant'],
+        cbar_kws={'label': 'Count'}
+    )
+    ax.set_title(f'Confusion Matrix - {model_name}', fontsize=16, fontweight='bold')
+    ax.set_ylabel('Actual Label', fontsize=12)
+    ax.set_xlabel('Predicted Label', fontsize=12)
+    plt.tight_layout()
     return fig
 
 def plot_roc_curve(y_true, y_pred_proba, model_name):
+    """Generates a styled ROC curve plot."""
     fpr, tpr, _ = roc_curve(y_true, y_pred_proba)
     roc_auc = auc(fpr, tpr)
     fig, ax = plt.subplots(figsize=(8, 6))
     ax.plot(fpr, tpr, color='darkorange', lw=2.5, label=f'ROC (AUC = {roc_auc:.4f})')
     ax.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
-    ax.set_xlabel('False Positive Rate')
-    ax.set_ylabel('True Positive Rate')
-    ax.set_title(f'ROC Curve - {model_name}', fontweight='bold')
-    ax.legend()
+    ax.set_xlabel('False Positive Rate', fontsize=12)
+    ax.set_ylabel('True Positive Rate', fontsize=12)
+    ax.set_title(f'ROC Curve - {model_name}', fontsize=16, fontweight='bold')
+    ax.legend(loc="lower right")
     ax.grid(alpha=0.3)
+    plt.tight_layout()
     return fig
 
 def plot_pr_curve(y_true, y_pred_proba, model_name):
+    """Generates a styled Precision-Recall curve plot."""
     precision, recall, _ = precision_recall_curve(y_true, y_pred_proba)
     pr_auc = auc(recall, precision)
     fig, ax = plt.subplots(figsize=(8, 6))
     ax.plot(recall, precision, color='green', lw=2.5, label=f'PR (AUC = {pr_auc:.4f})')
-    ax.set_xlabel('Recall')
-    ax.set_ylabel('Precision')
-    ax.set_title(f'Precision-Recall Curve - {model_name}', fontweight='bold')
-    ax.legend()
+    ax.set_xlabel('Recall', fontsize=12)
+    ax.set_ylabel('Precision', fontsize=12)
+    ax.set_title(f'Precision-Recall Curve - {model_name}', fontsize=16, fontweight='bold')
+    ax.legend(loc="lower left")
     ax.grid(alpha=0.3)
+    plt.tight_layout()
     return fig
 
-# ============================================================================
-# MAIN APP HEADER
-# ============================================================================
+# ======================================================================================
+# ------------------------------ MAIN APPLICATION UI -----------------------------------
+# ======================================================================================
 
-st.markdown("# Hospital Breast Cancer Detection System")
-st.markdown("Clinical decision support using machine learning")
+# --- HEADER ---
+st.markdown("<h1 style='text-align: center; color: #E83E8C;'>🏥 Early Detection of Breast Cancer Using Machine Learning</h1>", unsafe_allow_html=True)
+st.markdown("<h4 style='text-align: center; color: #6c757d;'>A clinical decision support tool powered by an ensemble of predictive models.</h4>", unsafe_allow_html=True)
 st.markdown("---")
 
-# ============================================================================
-# MODE SELECTION
-# ============================================================================
+# --- MODEL EXISTENCE CHECK ---
+if not models_exist:
+    st.error("🔴 **CRITICAL ERROR: Model files not found!**")
+    st.warning("Please ensure the following files are present in the `models/` directory:")
+    st.code("""
+    models/
+    ├── logistic_regression.pkl
+    ├── random_forest.pkl
+    ├── xgboost.pkl
+    ├── scaler.pkl
+    └── feature_names.pkl
+    """)
+    st.stop()
 
+# --- MODE SELECTION ---
+st.markdown("### Select an Operating Mode")
 mode = st.radio(
-    "Select Testing Mode:",
-    ["Load Sample Data", "Single Patient Prediction", "Batch Testing (CSV Upload)"],
-    horizontal=True
+    "Choose how you want to test the models:",
+    ["📊 Load Sample Data", "👩‍⚕️ Single Patient Prediction", "📂 Batch Testing (CSV Upload)"],
+    horizontal=True,
+    label_visibility="collapsed"
 )
 
-# ============================================================================
-# PAGE 1: LOAD SAMPLE DATA
-# ============================================================================
+st.markdown("---")
 
-if mode == "Load Sample Data":
-    st.markdown("## Load Sample Data from Existing Dataset")
-    st.markdown("Select and test predictions on actual patient samples from the dataset")
-    st.markdown("---")
+# ======================================================================================
+# ----------------------------- MODE 1: LOAD SAMPLE DATA -------------------------------
+# ======================================================================================
+
+if mode == "📊 Load Sample Data":
+    st.header("📊 Test with Sample Data from Dataset")
+    st.markdown("Select an actual patient sample from the pre-loaded dataset to see how the models perform.")
     
     try:
         df1 = pd.read_csv('data/data.csv')
@@ -150,44 +170,42 @@ if mode == "Load Sample Data":
         combined_df = combined_df.iloc[:, ~combined_df.columns.duplicated()]
         combined_df = combined_df.dropna()
         
-        st.markdown("### Dataset Information")
+        st.subheader("Dataset Overview")
         col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Total Samples", len(combined_df))
-        with col2:
-            benign_count = sum(combined_df['diagnosis'] == 'B')
-            st.metric("Benign Samples", benign_count)
-        with col3:
-            malignant_count = sum(combined_df['diagnosis'] == 'M')
-            st.metric("Malignant Samples", malignant_count)
+        benign_count = sum(combined_df['diagnosis'] == 'B')
+        malignant_count = sum(combined_df['diagnosis'] == 'M')
+        col1.metric("Total Samples", len(combined_df))
+        col2.metric("🟢 Benign Samples", benign_count)
+        col3.metric("🔴 Malignant Samples", malignant_count)
         
-        st.markdown("### Select a Sample Patient")
-        sample_index = st.slider("Select patient index", 0, len(combined_df) - 1, 0)
+        st.markdown("### Select a Patient Sample by Index")
+        sample_index = st.slider("Slide to select a patient:", 0, len(combined_df) - 1, 0)
         
         sample = combined_df.iloc[sample_index]
         actual_diagnosis = sample['diagnosis']
         
-        st.markdown("### Selected Patient Data")
-        col1, col2 = st.columns(2)
+        col1, col2 = st.columns([1, 2])
         with col1:
-            st.markdown("**Actual Diagnosis:** " + ("Malignant" if actual_diagnosis == 'M' else "Benign"))
-            st.markdown(f"**Patient Index:** {sample_index}")
+            st.markdown("#### Patient Details")
+            diagnosis_text = "🔴 Malignant" if actual_diagnosis == 'M' else "🟢 Benign"
+            st.markdown(f"**Actual Diagnosis:** {diagnosis_text}")
+            st.markdown(f"**Patient Index:** `{sample_index}`")
         
-        st.dataframe(pd.DataFrame({
-            'Feature': feature_names,
-            'Value': [sample[f] for f in feature_names]
-        }), use_container_width=True)
+        with col2:
+            st.markdown("#### Clinical Features")
+            st.dataframe(pd.DataFrame({
+                'Feature': feature_names,
+                'Value': [sample[f] for f in feature_names]
+            }), use_container_width=True, height=250)
         
-        if st.button("Get Predictions for This Patient"):
+        if st.button("🔬 Predict for This Patient", use_container_width=True, type="primary"):
             st.markdown("---")
-            st.markdown("## Prediction Results")
+            st.subheader("📈 Prediction Results")
             
             sample_df = pd.DataFrame([sample[feature_names]])
             sample_scaled = preprocess_new_data(sample_df, feature_names, scaler)
             
-            predictions = {}
-            results_data = []
-            
+            predictions, results_data = {}, []
             for model_name, model in models.items():
                 pred = model.predict(sample_scaled)[0]
                 proba = model.predict_proba(sample_scaled)[0]
@@ -197,58 +215,52 @@ if mode == "Load Sample Data":
                     'Model': model_name,
                     'Prediction': 'Malignant' if pred == 1 else 'Benign',
                     'Confidence': f"{confidence:.2f}%",
-                    'Benign %': f"{proba[0]*100:.2f}%",
-                    'Malignant %': f"{proba[1]*100:.2f}%"
+                    'Benign Prob.': f"{proba[0]*100:.2f}%",
+                    'Malignant Prob.': f"{proba[1]*100:.2f}%"
                 })
             
-            st.dataframe(pd.DataFrame(results_data), use_container_width=True)
+            st.table(pd.DataFrame(results_data).set_index('Model'))
             
             malignant_votes = sum(1 for p in predictions.values() if p == 1)
             consensus = "MALIGNANT" if malignant_votes >= 2 else "BENIGN"
             
-            st.markdown("---")
-            st.markdown("## Comparison with Actual Diagnosis")
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.markdown(f"**Actual:** {'Malignant' if actual_diagnosis == 'M' else 'Benign'}")
-            with col2:
-                st.markdown(f"**Predicted:** {consensus}")
-            with col3:
-                is_correct = (consensus == 'MALIGNANT' and actual_diagnosis == 'M') or (consensus == 'BENIGN' and actual_diagnosis == 'B')
-                st.markdown("**Result:** CORRECT" if is_correct else "**Result:** INCORRECT")
-    
+            st.markdown("### 🏁 Final Assessment")
+            is_correct = (consensus == 'MALIGNANT' and actual_diagnosis == 'M') or \
+                         (consensus == 'BENIGN' and actual_diagnosis == 'B')
+            
+            if is_correct:
+                st.success(f"**Consensus Prediction:** {consensus} | **Actual Diagnosis:** {diagnosis_text} -> ✅ **CORRECT**")
+            else:
+                st.error(f"**Consensus Prediction:** {consensus} | **Actual Diagnosis:** {diagnosis_text} -> ❌ **INCORRECT**")
+
     except FileNotFoundError:
-        st.error("Data files not found in data/ folder")
+        st.error("Data files not found in `data/` folder. Please check your data directory.")
 
-# ============================================================================
-# PAGE 2: SINGLE PATIENT PREDICTION
-# ============================================================================
+# ======================================================================================
+# ------------------------- MODE 2: SINGLE PATIENT PREDICTION --------------------------
+# ======================================================================================
 
-elif mode == "Single Patient Prediction":
-    st.markdown("## Enter Patient Information")
-    st.markdown("Input the 30 clinical features for the patient")
+elif mode == "👩‍⚕️ Single Patient Prediction":
+    st.header("👩‍⚕️ Predict for a Single Patient")
+    st.markdown("Enter the 30 clinical feature values below to get a prediction.")
     
-    col1, col2 = st.columns(2)
-    patient_data = {}
+    with st.expander("Enter Patient Data Here", expanded=True):
+        col1, col2 = st.columns(2)
+        patient_data = {}
+        
+        for idx, feature in enumerate(feature_names):
+            target_col = col1 if idx % 2 == 0 else col2
+            with target_col:
+                patient_data[feature] = st.number_input(feature, value=0.00, step=0.01, format="%.4f")
     
-    for idx, feature in enumerate(feature_names):
-        if idx % 2 == 0:
-            with col1:
-                patient_data[feature] = st.number_input(feature, value=0.0, step=0.01)
-        else:
-            with col2:
-                patient_data[feature] = st.number_input(feature, value=0.0, step=0.01)
-    
-    if st.button("Get Prediction"):
+    if st.button("🔬 Get Prediction", use_container_width=True, type="primary"):
         st.markdown("---")
-        st.markdown("## Prediction Results")
+        st.subheader("📈 Prediction Results")
         
         df_patient = pd.DataFrame([patient_data])
         patient_scaled = preprocess_new_data(df_patient, feature_names, scaler)
         
-        predictions = {}
-        results_data = []
-        
+        predictions, results_data = {}, []
         for model_name, model in models.items():
             pred = model.predict(patient_scaled)[0]
             proba = model.predict_proba(patient_scaled)[0]
@@ -258,59 +270,52 @@ elif mode == "Single Patient Prediction":
                 'Model': model_name,
                 'Prediction': 'Malignant' if pred == 1 else 'Benign',
                 'Confidence': f"{confidence:.2f}%",
-                'Benign %': f"{proba[0]*100:.2f}%",
-                'Malignant %': f"{proba[1]*100:.2f}%"
+                'Benign Prob.': f"{proba[0]*100:.2f}%",
+                'Malignant Prob.': f"{proba[1]*100:.2f}%"
             })
         
-        st.dataframe(pd.DataFrame(results_data), use_container_width=True)
+        st.table(pd.DataFrame(results_data).set_index('Model'))
         
         malignant_votes = sum(1 for p in predictions.values() if p == 1)
         consensus = "MALIGNANT" if malignant_votes >= 2 else "BENIGN"
         
-        st.markdown("---")
-        st.markdown("## Final Recommendation")
+        st.markdown("### 🏁 Final Recommendation")
         if consensus == "MALIGNANT":
-            st.error(f"MALIGNANT - {malignant_votes}/3 models indicate malignancy")
+            st.error(f"**FINAL DIAGNOSIS: MALIGNANT** ({malignant_votes}/3 models agree)")
         else:
-            st.success(f"BENIGN - {3-malignant_votes}/3 models indicate benign")
+            st.success(f"**FINAL DIAGNOSIS: BENIGN** ({3-malignant_votes}/3 models agree)")
 
-# ============================================================================
-# PAGE 3: BATCH TESTING
-# ============================================================================
+# ======================================================================================
+# -------------------------- MODE 3: BATCH TESTING (CSV) -------------------------------
+# ======================================================================================
 
-elif mode == "Batch Testing (CSV Upload)":
-    st.markdown("## Batch Testing - Upload CSV File")
-    st.markdown("Upload a CSV with patient data. If it has 'diagnosis' column, metrics will be calculated.")
+elif mode == "📂 Batch Testing (CSV Upload)":
+    st.header("📂 Batch Testing with CSV File")
+    st.markdown("Upload a CSV file containing patient data. If a `diagnosis` column is present, the app will calculate and display performance metrics.")
     
-    uploaded_file = st.file_uploader("Choose CSV file", type=['csv'])
+    uploaded_file = st.file_uploader("Choose a CSV file", type=['csv'])
     
-    if uploaded_file is not None:
+    if uploaded_file:
         try:
             df = pd.read_csv(uploaded_file)
             
-            st.markdown("### Data Summary")
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Total Patients", len(df))
-            with col2:
-                st.metric("Features", len(df.columns))
-            with col3:
-                st.metric("Has Diagnosis", "Yes" if 'diagnosis' in df.columns else "No")
-            
-            st.markdown("### Preview")
-            st.dataframe(df.head(10), use_container_width=True)
-            
+            st.subheader("Data Summary & Preview")
             has_diagnosis = 'diagnosis' in df.columns
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Total Patients", len(df))
+            col2.metric("Total Features", len(df.columns))
+            col3.metric("Diagnosis Column", "✅ Found" if has_diagnosis else "❌ Not Found")
+            st.dataframe(df.head(10), use_container_width=True)
             
             try:
                 df_features = df[feature_names].copy()
                 df_scaled = scaler.transform(df_features)
-            except KeyError:
-                st.error("Missing features in CSV")
+            except KeyError as e:
+                st.error(f"**Feature Mismatch Error:** The uploaded CSV is missing a required feature column: `{e}`. Please check the file.")
                 st.stop()
             
             st.markdown("---")
-            st.markdown("### Predictions")
+            st.subheader("📊 Batch Prediction Results")
             
             pred_map = {0: 'Benign', 1: 'Malignant'}
             predictions_list = []
@@ -319,29 +324,28 @@ elif mode == "Batch Testing (CSV Upload)":
                 preds = model.predict(df_scaled)
                 probas = model.predict_proba(df_scaled)[:, 1]
                 predictions_list.append({
-                    'model_name': model_name,
-                    'predictions': preds,
-                    'probabilities': probas
+                    'model_name': model_name, 'predictions': preds, 'probabilities': probas
                 })
             
             results_df = pd.DataFrame({
-                'Patient_ID': range(1, len(df) + 1),
-                'LR_Prediction': [pred_map[predictions_list[0]['predictions'][i]] for i in range(len(df))],
-                'RF_Prediction': [pred_map[predictions_list[1]['predictions'][i]] for i in range(len(df))],
-                'XGB_Prediction': [pred_map[predictions_list[2]['predictions'][i]] for i in range(len(df))],
-                'Avg_Confidence': np.mean([predictions_list[0]['probabilities'],
-                                           predictions_list[1]['probabilities'],
-                                           predictions_list[2]['probabilities']], axis=0)
+                'Patient_ID': df.index,
+                'LR_Prediction': [pred_map[p] for p in predictions_list[0]['predictions']],
+                'RF_Prediction': [pred_map[p] for p in predictions_list[1]['predictions']],
+                'XGB_Prediction': [pred_map[p] for p in predictions_list[2]['predictions']],
+                'Avg_Malignant_Prob': np.mean([p['probabilities'] for p in predictions_list], axis=0)
             })
             
             st.dataframe(results_df, use_container_width=True)
             
-            csv = results_df.to_csv(index=False)
-            st.download_button("Download Predictions as CSV", csv, "predictions.csv", "text/csv")
+            csv = results_df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                "📥 Download Predictions as CSV", csv, "batch_predictions.csv",
+                "text/csv", key='download-csv', use_container_width=True
+            )
             
             if has_diagnosis:
                 st.markdown("---")
-                st.markdown("### Model Performance Metrics")
+                st.subheader("📈 Model Performance Metrics")
                 
                 y_true = df['diagnosis'].map({'M': 1, 'B': 0})
                 metrics_data = []
@@ -353,35 +357,45 @@ elif mode == "Batch Testing (CSV Upload)":
                         'Accuracy': f"{metrics['accuracy']:.4f}",
                         'Precision': f"{metrics['precision']:.4f}",
                         'Recall': f"{metrics['recall']:.4f}",
-                        'F1-Score': f"{metrics['f1_score']:.4f}"
+                        'F1-Score': f"{metrics['f1_score']:.4f}",
+                        'AUC': f"{metrics['auc_score']:.4f}" if metrics['auc_score'] else "N/A"
                     })
                 
-                st.dataframe(pd.DataFrame(metrics_data), use_container_width=True)
+                st.table(pd.DataFrame(metrics_data).set_index('Model'))
                 
-                st.markdown("### Confusion Matrices")
-                cols = st.columns(3)
-                for idx, pred_data in enumerate(predictions_list):
-                    with cols[idx]:
-                        fig = plot_confusion_matrix(y_true, pred_data['predictions'], pred_data['model_name'])
-                        st.pyplot(fig)
+                st.markdown("### Performance Visualizations")
+                tab1, tab2, tab3 = st.tabs(["Confusion Matrices", "ROC Curves", "Precision-Recall Curves"])
                 
-                st.markdown("### ROC Curves")
-                cols = st.columns(3)
-                for idx, pred_data in enumerate(predictions_list):
-                    with cols[idx]:
-                        fig = plot_roc_curve(y_true, pred_data['probabilities'], pred_data['model_name'])
-                        st.pyplot(fig)
-        
+                with tab1:
+                    cols = st.columns(3)
+                    for i, p_data in enumerate(predictions_list):
+                        with cols[i]:
+                            fig = plot_confusion_matrix(y_true, p_data['predictions'], p_data['model_name'])
+                            st.pyplot(fig)
+                with tab2:
+                    cols = st.columns(3)
+                    for i, p_data in enumerate(predictions_list):
+                        with cols[i]:
+                            fig = plot_roc_curve(y_true, p_data['probabilities'], p_data['model_name'])
+                            st.pyplot(fig)
+                with tab3:
+                    cols = st.columns(3)
+                    for i, p_data in enumerate(predictions_list):
+                        with cols[i]:
+                            fig = plot_pr_curve(y_true, p_data['probabilities'], p_data['model_name'])
+                            st.pyplot(fig)
+
         except Exception as e:
-            st.error(f"Error: {e}")
+            st.error(f"An error occurred while processing the file: {e}")
 
-# ============================================================================
-# FOOTER
-# ============================================================================
-
+# ======================================================================================
+# -------------------------------------- FOOTER ----------------------------------------
+# ======================================================================================
 st.markdown("---")
-st.markdown("<div style='text-align: center; padding: 20px;'>" + 
-            "<p style='font-size: 12px; color: #888;'>" +
-            "Made by <b>Rahin Toshmi Ohee</b>" +
-            "</p>" +
-            "</div>", unsafe_allow_html=True)
+st.markdown("""
+<div style='text-align: center; padding: 20px;'>
+    <p style='font-size: 14px; color: #888;'>
+        ✨ Made by <b><i>Rahin Toshmi Ohee</i></b> ✨
+    </p>
+</div>
+""", unsafe_allow_html=True)
