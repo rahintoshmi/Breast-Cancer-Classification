@@ -114,10 +114,6 @@ def plot_pr_curve(y_true, y_pred_proba, model_name):
     ax.grid(alpha=0.3)
     return fig
 
-# ============================================================================
-# ERROR CHECK
-# ============================================================================
-
 if not models_exist:
     st.error("ERROR: Models not found!")
     st.warning("Make sure you have these files in the 'models/' folder:")
@@ -132,8 +128,173 @@ if not models_exist:
     st.stop()
 
 # ============================================================================
+# PAGE 0: LOAD SAMPLE DATA
+# ============================================================================
+
+if mode == "Load Sample Data":
+    st.markdown("## Load Sample Data from Existing Dataset")
+    st.markdown("Select and test predictions on actual patient samples from the dataset")
+    st.markdown("---")
+    
+    try:
+        # Load combined dataset
+        df1 = pd.read_csv('data/data.csv')
+        df2 = pd.read_csv('data/breast_cancer.csv')
+        combined_df = pd.concat([df1, df2], ignore_index=True).drop_duplicates()
+        
+        # Clean data
+        combined_df = combined_df.drop('id', axis=1, errors='ignore')
+        combined_df = combined_df.loc[:, ~combined_df.columns.str.contains('^Unnamed')]
+        combined_df = combined_df.iloc[:, ~combined_df.columns.duplicated()]
+        combined_df = combined_df.dropna()
+        
+        st.markdown("### Dataset Information")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Samples", len(combined_df))
+        with col2:
+            benign_count = sum(combined_df['diagnosis'] == 'B')
+            st.metric("Benign Samples", benign_count)
+        with col3:
+            malignant_count = sum(combined_df['diagnosis'] == 'M')
+            st.metric("Malignant Samples", malignant_count)
+        
+        # Select sample
+        st.markdown("### Select a Sample Patient")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            sample_index = st.slider(
+                "Select patient index",
+                min_value=0,
+                max_value=len(combined_df) - 1,
+                value=0
+            )
+        
+        with col2:
+            sample_type = st.radio(
+                "Filter by type:",
+                ["All", "Benign Only", "Malignant Only"],
+                horizontal=True
+            )
+            
+            if sample_type == "Benign Only":
+                filtered_indices = combined_df[combined_df['diagnosis'] == 'B'].index.tolist()
+                sample_index = st.slider(
+                    "Select benign patient",
+                    min_value=0,
+                    max_value=len(filtered_indices) - 1,
+                    value=0,
+                    key="benign_slider"
+                )
+                sample_index = filtered_indices[sample_index]
+            
+            elif sample_type == "Malignant Only":
+                filtered_indices = combined_df[combined_df['diagnosis'] == 'M'].index.tolist()
+                sample_index = st.slider(
+                    "Select malignant patient",
+                    min_value=0,
+                    max_value=len(filtered_indices) - 1,
+                    value=0,
+                    key="malignant_slider"
+                )
+                sample_index = filtered_indices[sample_index]
+        
+        # Get sample
+        sample = combined_df.iloc[sample_index]
+        actual_diagnosis = sample['diagnosis']
+        
+        st.markdown("### Selected Patient Data")
+        
+        # Display patient features
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("**Actual Diagnosis:** " + ("🔴 Malignant" if actual_diagnosis == 'M' else "🟢 Benign"))
+            st.markdown(f"**Patient Index:** {sample_index}")
+        
+        with col2:
+            st.markdown(f"**Feature Values:** {len(feature_names)} features")
+        
+        # Show features table
+        st.dataframe(pd.DataFrame({
+            'Feature': feature_names,
+            'Value': [sample[f] for f in feature_names]
+        }), use_container_width=True)
+        
+        # Make predictions
+        if st.button("Get Predictions for This Patient"):
+            st.markdown("---")
+            st.markdown("## Prediction Results")
+            
+            # Prepare data
+            sample_df = pd.DataFrame([sample[feature_names]])
+            sample_scaled = preprocess_new_data(sample_df, feature_names, scaler)
+            
+            # Get predictions
+            predictions = {}
+            results_data = []
+            
+            for model_name, model in models.items():
+                pred = model.predict(sample_scaled)[0]
+                proba = model.predict_proba(sample_scaled)[0]
+                confidence = max(proba) * 100
+                
+                predictions[model_name] = pred
+                
+                results_data.append({
+                    'Model': model_name,
+                    'Prediction': 'Malignant' if pred == 1 else 'Benign',
+                    'Confidence': f"{confidence:.2f}%",
+                    'Benign %': f"{proba[0]*100:.2f}%",
+                    'Malignant %': f"{proba[1]*100:.2f}%"
+                })
+            
+            df_results = pd.DataFrame(results_data)
+            st.dataframe(df_results, use_container_width=True)
+            
+            # Consensus
+            malignant_votes = sum(1 for p in predictions.values() if p == 1)
+            consensus = "MALIGNANT" if malignant_votes >= 2 else "BENIGN"
+            
+            st.markdown("---")
+            st.markdown("## Comparison with Actual Diagnosis")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.markdown(f"**Actual:** {'🔴 Malignant' if actual_diagnosis == 'M' else '🟢 Benign'}")
+            
+            with col2:
+                st.markdown(f"**Predicted:** {'🔴 {}'.format(consensus) if consensus == 'MALIGNANT' else '🟢 {}'.format(consensus)}")
+            
+            with col3:
+                is_correct = (consensus == 'MALIGNANT' and actual_diagnosis == 'M') or (consensus == 'BENIGN' and actual_diagnosis == 'B')
+                if is_correct:
+                    st.markdown("**Result:** ✅ CORRECT")
+                else:
+                    st.markdown("**Result:** ❌ INCORRECT")
+    
+    except FileNotFoundError:
+        st.error("Data files not found in data/ folder")
+        st.info("Make sure you have data/data.csv and data/breast_cancer.csv")
+
+# ============================================================================
 # MAIN APP
 # ============================================================================
+
+elif not models_exist:
+    st.error("ERROR: Models not found!")
+    st.warning("Make sure you have these files in the 'models/' folder:")
+    st.code("""
+    models/
+    ├── logistic_regression.pkl
+    ├── random_forest.pkl
+    ├── xgboost.pkl
+    ├── scaler.pkl
+    └── feature_names.pkl
+    """)
 
 st.markdown("# Hospital Breast Cancer Detection System")
 st.markdown("Clinical decision support using machine learning")
@@ -142,7 +303,7 @@ st.markdown("---")
 # Mode selection
 mode = st.radio(
     "Select Testing Mode:",
-    ["Single Patient Prediction", "Batch Testing (CSV Upload)"],
+    ["Load Sample Data", "Single Patient Prediction", "Batch Testing (CSV Upload)"],
     horizontal=True
 )
 
@@ -355,3 +516,14 @@ elif mode == "Batch Testing (CSV Upload)":
         except Exception as e:
             st.error(f"Error processing file: {e}")
             st.info("Make sure CSV has the correct format and all required features")
+
+# ============================================================================
+# FOOTER
+# ============================================================================
+
+st.markdown("---")
+st.markdown("<div style='text-align: center; padding: 20px;'>" + 
+            "<p style='font-size: 12px; color: #888;'>" +
+            "Made by <b>Rahin Toshmi Ohee</b>" +
+            "</p>" +
+            "</div>", unsafe_allow_html=True)
