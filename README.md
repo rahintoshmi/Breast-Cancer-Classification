@@ -27,7 +27,7 @@ Try the project live by clicking the link below:
   <tr>
     <td align="center">
       <h4>Load Sample Data</h4>
-      <img src="https://i.imghippo.com/files/aNjG6452Q.png" alt="Load Sample Data" style="max-width:300px; width:100%;">
+      <img src="https://i.postimg.cc/cHZtdLDK/model.png" alt="Load Sample Data" style="max-width:300px; width:100%;">
     </td>
     <td align="center">
       <h4>Single Patient Prediction</h4>
@@ -35,7 +35,7 @@ Try the project live by clicking the link below:
     </td>
     <td align="center">
       <h4>Batch Testing (CSV Upload)</h4>
-      <img src="https://i.imghippo.com/files/yXo6977o.png" alt="Batch Testing" style="max-width:300px; width:100%;">
+      <img src="https://i.postimg.cc/3RKNPbRT/model3.png" alt="Batch Testing" style="max-width:300px; width:100%;">
     </td>
   </tr>
 </table>
