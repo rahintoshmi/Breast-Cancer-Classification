@@ -173,9 +173,9 @@ The repository follows a clean modular layout for scalability:
 Want to improve or extend the project? Contributions are welcome!
 
 1. Fork the repository  
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)  
-3. Commit changes (`git commit -m 'Add some AmazingFeature'`)  
-4. Push changes (`git push origin feature/AmazingFeature`)  
+2. Create a feature branch  
+3. Commit changes
+4. Push changes  
 5. Submit a pull request  
 
 ---
