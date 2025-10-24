@@ -180,15 +180,9 @@ Want to improve or extend the project? Contributions are welcome!
 
 ---
 
-## 📝 License
-
-Distributed under the **MIT License**.  
-See the `LICENSE` file for details.
-
----
-
 ## 📬 Contact
 
 **Rahin Toshmi Ohee**  
+Linkdin: [@Rahin Toshmi Ohee](https://www.linkedin.com/in/rahintoshmiohee) 
 GitHub: [@rahintoshmi](https://github.com/rahintoshmi)  
 Feel free to share feedback or questions!
